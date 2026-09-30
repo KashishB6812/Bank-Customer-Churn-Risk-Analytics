@@ -13,8 +13,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from src.churn_pipeline import generate_synthetic_data, get_feature_list, load_data, save_json
+try:
+    import xgboost as xgb
+except Exception:  # pragma: no cover
+    xgb = None
 
+from src.generate_data import generate_synthetic_data, get_feature_list, load_data, save_json
 
 MODEL_PATH = Path("artifacts/churn_model.pkl")
 METRICS_PATH = Path("artifacts/metrics.json")
@@ -37,22 +41,33 @@ def build_preprocessor() -> ColumnTransformer:
         ]
     )
 
-    preprocessor = ColumnTransformer(
+    return ColumnTransformer(
         transformers=[
             ("num", numeric_transformer, numeric_features),
             ("cat", categorical_transformer, categorical_features),
         ]
     )
 
-    return preprocessor
 
-
-def get_model_candidates() -> list[tuple[str, object]]:
-    return [
+def get_model_candidates():
+    candidates = [
         ("Logistic Regression", LogisticRegression(max_iter=1000, random_state=42)),
-        ("Random Forest", RandomForestClassifier(n_estimators=200, random_state=42, class_weight="balanced")),
+        ("Random Forest", RandomForestClassifier(n_estimators=220, random_state=42, class_weight="balanced")),
         ("Gradient Boosting", GradientBoostingClassifier(random_state=42)),
     ]
+
+    if xgb is not None:
+        candidates.append(("XGBoost", xgb.XGBClassifier(
+            n_estimators=250,
+            max_depth=6,
+            learning_rate=0.05,
+            subsample=0.9,
+            colsample_bytree=0.9,
+            random_state=42,
+            eval_metric="logloss",
+        )))
+
+    return candidates
 
 
 def train_and_save_model(df: pd.DataFrame) -> dict:
@@ -96,12 +111,14 @@ def train_and_save_model(df: pd.DataFrame) -> dict:
             "roc_auc": roc_auc_score(y_test, y_prob),
         }
 
-        score = metrics["roc_auc"]
-        if score > best_score:
-            best_score = score
+        if metrics["roc_auc"] > best_score:
+            best_score = metrics["roc_auc"]
             best_pipeline = pipeline
             best_name = model_name
             best_metrics = metrics
+
+    if best_pipeline is None:
+        raise ValueError("No model candidates were trained.")
 
     with open(MODEL_PATH, "wb") as model_file:
         pickle.dump(best_pipeline, model_file)
@@ -125,5 +142,4 @@ if __name__ == "__main__":
         generate_synthetic_data(save_path=data_path)
 
     df = load_data(data_path)
-    results = train_and_save_model(df)
-    print(results)
+    print(train_and_save_model(df))

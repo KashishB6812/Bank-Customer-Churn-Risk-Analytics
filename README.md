@@ -1,38 +1,20 @@
 # Bank Customer Churn Risk Analytics
 
-A practical financial analytics project focused on predicting customer churn risk for a retail bank and helping business teams prioritize retention actions.
+A financial analytics project focused on predicting customer churn risk for a retail bank and supporting proactive, high-value retention planning.
 
-## Project Objective
+## Business Objective
 
-This project builds a churn prediction and risk-scoring system to identify customers most likely to leave, quantify the business impact, and support proactive retention strategies.
+This project estimates the probability that a customer will churn and translates that risk into a commercially useful retention score. The goal is to help banks identify high-risk customers, prioritize interventions, and protect revenue streams.
 
-## Business Value
+## What is Included
 
-- Reduce customer attrition and protect revenue
-- Rank customers by churn probability and business risk
-- Support targeted retention campaigns
-- Improve explainability for stakeholders and regulators
-- Provide a dashboard for scenario analysis and risk monitoring
-
-## Dataset
-
-The project uses a banking customer dataset with the following fields:
-
-- CustomerId
-- Surname
-- CreditScore
-- Geography
-- Gender
-- Age
-- Tenure
-- Balance
-- NumOfProducts
-- HasCrCard
-- IsActiveMember
-- EstimatedSalary
-- Exited (target variable)
-
-A synthetic dataset is generated automatically if no local file is available.
+- Predictive churn modeling for bank customers
+- Customer-level churn probability dashboard
+- Risk classification by low/medium/high risk
+- Revenue-at-risk estimation
+- Feature importance and explainability
+- Scenario simulation for retention planning
+- Financial decision support for bank stakeholders
 
 ## Project Structure
 
@@ -48,9 +30,9 @@ Bank-Customer-Churn-Risk-Analytics/
 │   └── metrics.json
 └── src/
     ├── __init__.py
-    ├── churn_pipeline.py
     ├── generate_data.py
-    └── train_model.py
+    ├── train_model.py
+    └── churn_pipeline.py
 ```
 
 ## Setup
@@ -61,50 +43,33 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## Run the Project
-
-### 1) Generate dataset
+## Run the App
 
 ```bash
 python src/generate_data.py
-```
-
-### 2) Train the churn model
-
-```bash
 python src/train_model.py
-```
-
-### 3) Launch the Streamlit dashboard
-
-```bash
 streamlit run app.py
 ```
 
-## Dashboard Features
+## Advanced Features Added
 
-- Customer churn risk calculator
-- Probability distribution visualization
-- Feature importance analysis
-- What-if retention scenario simulator
-- Business-oriented risk assessment and interpretation
+- Financial impact analysis with revenue-at-risk metrics
+- Risk threshold control for retention campaigns
+- High-priority customer ranking for relationship managers
+- Business scenario simulation for churn prevention
+- XGBoost support when installed
+- Explainable feature importance dashboard
 
-## Model Strategy
+## Key Use Cases
 
-- Data preprocessing and feature engineering
-- Encoding of categorical variables
-- Train-test split with class stratification
-- Baseline and ensemble models
-- Performance evaluation using precision, recall, F1-score, and ROC-AUC
+- Early warning for likely churners
+- Detecting customers with high balance and high churn risk
+- Identifying product and engagement patterns linked to churn
+- Prioritizing retention spending on customers with maximum impact
 
-## Recommended Output for Stakeholders
+## Deliverables
 
-- Churn probability (0 to 1)
-- Risk band: Low / Medium / High
-- Ranked list of high-risk customers
-- Key churn drivers identified from model explanations
-- Scenario simulation for intervention planning
-
-## Notes
-
-This repository is designed to be easy to run locally and suitable for a financial analytics / banking risk project presentation.
+- Predictive churn model
+- Dashboard for bankers and managers
+- Executive-friendly retention insights
+- Risk-based scenario planning output

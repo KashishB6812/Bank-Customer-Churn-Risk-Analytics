@@ -1,10 +1,13 @@
-from pathlib import Path
+from __future__ import annotations
+
 import pickle
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
-from src.churn_pipeline import get_feature_importance, load_data
+from src.generate_data import generate_synthetic_data, load_data
+from src.generate_data import get_feature_importance
 
 DATA_PATH = Path("data/bank_customer_churn.csv")
 MODEL_PATH = Path("artifacts/churn_model.pkl")
@@ -29,8 +32,6 @@ FEATURE_COLUMNS = [
 
 def ensure_model_ready():
     if not DATA_PATH.exists():
-        from src.generate_data import generate_synthetic_data
-
         generate_synthetic_data(save_path=str(DATA_PATH))
 
     if not MODEL_PATH.exists():
@@ -60,18 +61,23 @@ with open(MODEL_PATH, "rb") as model_file:
 raw_df = load_data(DATA_PATH)
 score_df = raw_df.copy()
 score_df["PredictedChurnProbability"] = model.predict_proba(score_df[FEATURE_COLUMNS])[:, 1]
+score_df["RevenueAtRisk"] = score_df["Balance"] * score_df["PredictedChurnProbability"] * 0.08
+score_df["RiskBand"] = score_df["PredictedChurnProbability"].apply(risk_label)
 
 st.title("Bank Customer Churn Risk Dashboard")
-st.caption("Predictive modeling and risk scoring for retail customer churn")
+st.caption("Financial analytics view of retail customer churn, retention priority, and business impact")
 
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Total Customers", f"{len(raw_df):,}")
 col2.metric("Churn Rate", f"{raw_df['Exited'].mean() * 100:.1f}%")
 col3.metric("Average Balance", f"${raw_df['Balance'].mean():,.0f}")
-col4.metric("Active Members", f"{raw_df['IsActiveMember'].mean() * 100:.1f}%")
+col4.metric("Revenue at Risk", f"${score_df['RevenueAtRisk'].sum():,.0f}")
+
+st.sidebar.header("Retention Strategy Controls")
+threshold = st.sidebar.slider("Risk threshold for retention campaign", 0.10, 0.90, 0.40, 0.05)
+priority_budget = st.sidebar.slider("Priority budget % of high-risk customers", 5, 30, 15, 5)
 
 st.subheader("Customer Risk Calculator")
-
 with st.form("customer_form"):
     left_col, right_col = st.columns(2)
 
@@ -96,8 +102,8 @@ with st.form("customer_form"):
     submitted = st.form_submit_button("Calculate Risk")
 
 if submitted:
-    customer_df = pd.DataFrame(
-        [{
+    customer_df = pd.DataFrame([
+        {
             "CreditScore": credit_score,
             "Geography": geography,
             "Gender": gender,
@@ -112,8 +118,8 @@ if submitted:
             "ProductDensity": product_density,
             "EngagementProductInteraction": engagement_product,
             "AgeTenureInteraction": age_tenure,
-        }]
-    )
+        }
+    ])
 
     prob = model.predict_proba(customer_df[FEATURE_COLUMNS])[0, 1]
     label = risk_label(prob)
@@ -121,42 +127,43 @@ if submitted:
     st.subheader("Current Customer Risk")
     st.metric("Predicted Churn Probability", f"{prob * 100:.2f}%")
     st.metric("Risk Category", label)
-
     st.progress(int(prob * 100))
 
+st.subheader("Financial Impact by Risk Band")
+segment_summary = score_df.groupby("RiskBand").agg(
+    Customers=("CustomerId", "count"),
+    AvgRisk=("PredictedChurnProbability", "mean"),
+    RevenueAtRisk=("RevenueAtRisk", "sum"),
+).reset_index()
+st.bar_chart(segment_summary.set_index("RiskBand")["RevenueAtRisk"])
+st.dataframe(segment_summary, use_container_width=True)
+
 st.subheader("Probability Distribution")
-
 hist_col, summary_col = st.columns([2, 1])
-
 with hist_col:
     st.bar_chart(score_df["PredictedChurnProbability"].value_counts().sort_index())
-
 with summary_col:
-    st.write("Probability summary")
     st.write(score_df["PredictedChurnProbability"].describe().round(3))
 
 st.subheader("Feature Importance Dashboard")
 feature_importance = get_feature_importance(model)
 feature_chart = feature_importance.head(10).set_index("feature")["importance"]
 st.bar_chart(feature_chart)
-
 st.dataframe(feature_importance.head(15), use_container_width=True)
 
 st.subheader("What-If Scenario Simulator")
 scenario_col1, scenario_col2 = st.columns(2)
-
 with scenario_col1:
     scenario_balance = st.slider("Adjust Balance", min_value=0, max_value=250000, value=120000, step=5000)
     scenario_products = st.slider("Adjust Number of Products", min_value=1, max_value=4, value=2)
     scenario_active = st.checkbox("Set Customer as Active", value=True)
-
 with scenario_col2:
     scenario_salary = st.slider("Adjust Salary", min_value=10000, max_value=200000, value=85000, step=5000)
     scenario_age = st.slider("Adjust Age", min_value=18, max_value=90, value=42)
     scenario_tenure = st.slider("Adjust Tenure", min_value=0, max_value=20, value=5)
 
-scenario_df = pd.DataFrame(
-    [{
+scenario_df = pd.DataFrame([
+    {
         "CreditScore": 650,
         "Geography": "France",
         "Gender": "Female",
@@ -171,27 +178,37 @@ scenario_df = pd.DataFrame(
         "ProductDensity": 0.7,
         "EngagementProductInteraction": 0.2,
         "AgeTenureInteraction": scenario_age * scenario_tenure,
-    }]
-)
+    }
+])
 
 scenario_prob = model.predict_proba(scenario_df[FEATURE_COLUMNS])[0, 1]
-
+scenario_label = risk_label(scenario_prob)
 st.metric("Scenario Churn Probability", f"{scenario_prob * 100:.2f}%")
-st.metric("Scenario Risk", risk_label(scenario_prob))
+st.metric("Scenario Risk", scenario_label)
 
-st.subheader("Top Risk Customers")
-high_risk = score_df.sort_values("PredictedChurnProbability", ascending=False).head(10)
+st.subheader("Retention Priority List")
+high_risk = score_df[score_df["PredictedChurnProbability"] >= threshold].sort_values(
+    ["PredictedChurnProbability", "RevenueAtRisk"], ascending=[False, False]
+).head(12)
 
-selected = [
+priority_columns = [
     "CustomerId",
-    "CreditScore",
     "Geography",
     "Age",
     "Balance",
     "NumOfProducts",
     "IsActiveMember",
-    "Exited",
     "PredictedChurnProbability",
+    "RevenueAtRisk",
+    "RiskBand",
 ]
 
-st.dataframe(high_risk[selected].round({"PredictedChurnProbability": 4}), use_container_width=True)
+st.dataframe(high_risk[priority_columns].round({"PredictedChurnProbability": 4, "RevenueAtRisk": 2}), use_container_width=True)
+
+st.subheader("Business Strategy Summary")
+eligible_customers = score_df[score_df["PredictedChurnProbability"] >= threshold]
+retention_journey_cost = eligible_customers["RevenueAtRisk"].sum() * (priority_budget / 100)
+
+st.metric("Customers in Retention Campaign", f"{len(eligible_customers):,}")
+st.metric("Campaign Priority Budget", f"${retention_journey_cost:,.0f}")
+st.metric("Projected Risk Coverage", f"{eligible_customers['PredictedChurnProbability'].mean() * 100:.1f}%")
